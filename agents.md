@@ -31,4 +31,15 @@ Regras inegociáveis dessas skills:
 - **Chave ausente/placeholder não se repete**: reportar e parar.
 - **Segredos** ficam em `~/.config/opencode/secrets/*.key`, lidos pelo `opencode.json` via `{file:...}` — nunca no repo, log ou commit.
 
+## 6. Diretriz de Desenvolvimento — Skillpedia (Reutilização Antecipada)
+**Regra inegociável:** Sempre que for desenvolver qualquer funcionalidade ou bloco de código, **não escreva tudo do zero por padrão**. Siga rigorosamente esta ordem de prioridade:
+
+1. **Buscar Prontos:** Pesquise na internet ou em bases existentes por soluções, bibliotecas ou códigos já prontos que façam a tarefa (ex: validação de CPF, integração com APIs, componentes UI, parsers, etc.). Use `websearch`, `context7`, `firecrawl`, `graphify`, `grep`.
+2. **Adaptar ou Combinar:** Se encontrar bases pré-prontas, adapte-as ao projeto (tokens, types, convenções). Se encontrar pedaços úteis, junte-os de forma coesa.
+3. **Escrever do Zero:** **Apenas se nada for encontrado após busca genuína** (2-3 min), escreva o código do zero.
+
+**Skill associada:** `skillpedia` (sempre ativa via `auto-activation`).
+
+---
+
 Documentação histórica (não é mais o mecanismo): `AUTO_ACTIVATION.md`, `CLAUDE.md`, `FINAL_SYSTEM.md`, `SKILLS_*.md`, `agents/*.md`. Os scripts aposentados estão em `legacy/`.

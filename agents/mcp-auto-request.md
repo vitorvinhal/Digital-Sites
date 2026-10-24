@@ -17,9 +17,8 @@ auto-activate: true
 | **chrome** | Browser automation | visualização de páginas, interação DOM |
 | **tavily** | Web search + extract | pesquisa web, extração de conteúdo |
 | **figma** | Figma integration | design files, components, tokens |
-| **higgsfield** | Hugging Face models | ML/AI models, embeddings |
 | **firecrawl** | Web scraping | scraping de sites, extração |
-| **strix** | AI image generation | Imagens com IA |
+| **strix** | Pentest autônomo | testes de segurança, vulnerabilidades |
 | **context7** | Documentação de libs | APIs, frameworks, bibliotecas |
 | **21st** | Code search/analysis | Análise de código, busca em repo |
 | **graphify** | Code graph analysis | Análise de grafos de código |

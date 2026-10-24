@@ -21,7 +21,6 @@
 | **Hyperframes** | `HYPERFRAMES_API_KEY` | [Hyperframes Platform](https://mcp.hyperframes.ai) |
 | **Strix** | `STRIX_API_KEY` | [Strix Platform](https://app.strix.ai) |
 | **ViceScale** | `VS_API_KEY` | [ViceScale Console](https://mcp.verscale.com) |
-| **Higgsfield** | `HIGGSFIELD_API_KEY` | [Higgsfield.ai](https://api.higgsfield.ai) |
 | **Ponytail** | `PONYTAIL_API_KEY` | [Ponytail.ai](https://mcp.ponytail.ai) |
 | **ThreeUI** | `THREEUI_API_KEY` | [ThreeUI](https://mcp.threeui.com) |
 | **21st.dev** | `ST_21ST_API_KEY` | [21st.dev Console](https://mcp.21st.dev) |

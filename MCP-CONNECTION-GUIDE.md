@@ -14,7 +14,7 @@ MCPs configurados no `config.json` não aparecem automaticamente conectados.
    - graphify (precisa ser iniciado como servidor)
 
 2. **MCPs externos** (precisam de servidor rodando):
-   - AISA, Tavily, Firecrawl, Strix, Higgsfield, Context7, 21st.dev
+   - AISA, Tavily, Firecrawl, Strix, Context7, 21st.dev
    - Estes são **APIs REST**, não servidores MCP nativos do OpenCode
 
 ## Como Usar os MCPs Configurados

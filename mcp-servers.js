@@ -400,154 +400,6 @@ class StrixMCP {
   }
 }
 
-// Higgsfield MCP Server
-class HiggsfieldMCP {
-  constructor() {
-    this.server = new Server(
-      {
-        name: 'higgsfield-mcp',
-        version: '1.0.0',
-      },
-      {
-        capabilities: {
-          resources: {},
-          tools: {},
-        },
-      }
-    );
-
-    this.setupHandlers();
-  }
-
-  setupHandlers() {
-    this.server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [
-        {
-          name: 'generate_image',
-          description:
-            'Gera imagem via Higgsfield AI (modelo xai/grok-imagine-image-2.0). Envia e espera o resultado; se não terminar, devolve request_id para consultar com image_status.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              prompt: { type: 'string' },
-              aspect_ratio: {
-                type: 'string',
-                enum: ['auto', '1:1', '1:2', '2:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16'],
-                description: 'Padrão auto',
-              },
-              resolution: { type: 'string', enum: ['1k', '2k'], description: 'Padrão 1k' },
-              quality: { type: 'string', enum: ['low', 'medium'], description: 'Padrão medium' },
-            },
-            required: ['prompt'],
-          },
-        },
-        {
-          name: 'image_status',
-          description: 'Consulta o status de uma geração Higgsfield pelo request_id (sem novo custo)',
-          inputSchema: {
-            type: 'object',
-            properties: { request_id: { type: 'string' } },
-            required: ['request_id'],
-          },
-        },
-      ],
-    }));
-
-    this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const args = request.params.arguments || {};
-      const apiKey = process.env.HIGGSFIELD_API_KEY;
-      const asText = (t) => ({ content: [{ type: 'text', text: t }] });
-      const asJson = (o) => asText(JSON.stringify(o, null, 2));
-      if (!apiKey || apiKey.startsWith('YOUR_')) {
-        return asText('Erro: HIGGSFIELD_API_KEY ausente/placeholder (esperado em ~/.config/opencode/secrets/higgsfield.key)');
-      }
-      // Base real: https://api.higgsfield.ai — auth scheme NÃO é Bearer, é "Key"
-      const api = async (path, opts = {}) => {
-        const res = await fetch(`https://api.higgsfield.ai${path}`, {
-          method: opts.method || 'GET',
-          headers: {
-            Authorization: `Key ${apiKey}`,
-            Accept: 'application/json',
-            ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
-          },
-          body: opts.body ? JSON.stringify(opts.body) : undefined,
-        });
-        const raw = await res.text();
-        let data;
-        try {
-          data = raw ? JSON.parse(raw) : null;
-        } catch (e) {
-          data = { raw: raw.slice(0, 400) };
-        }
-        return { status: res.status, ok: res.ok, data };
-      };
-      const waitTerminal = async (requestId, tries = 12, delayMs = 5000) => {
-        for (let i = 0; i < tries; i++) {
-          const r = await api(`/requests/${encodeURIComponent(requestId)}/status`);
-          const st = r.data && r.data.status;
-          if (['completed', 'failed', 'nsfw', 'canceled'].includes(st)) return r.data;
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-        }
-        return null;
-      };
-      try {
-        if (request.params.name === 'image_status') {
-          if (!args.request_id) return asText('Erro: informe request_id');
-          const r = await api(`/requests/${encodeURIComponent(args.request_id)}/status`);
-          if (!r.ok) return asJson(r.data);
-          const d = r.data;
-          return asJson({
-            request_id: args.request_id,
-            status: d.status,
-            images: (d.images || []).map((i) => i.url).filter(Boolean),
-            video: d.video && d.video.url,
-            error: d.error || d.message,
-          });
-        }
-        if (request.params.name === 'generate_image') {
-          if (!args.prompt) return asText('Erro: informe prompt');
-          const sub = await api('/xai/grok-imagine-image-2.0', {
-            method: 'POST',
-            body: {
-              prompt: String(args.prompt),
-              quality: ['low', 'medium'].includes(args.quality) ? args.quality : 'medium',
-              resolution: ['1k', '2k'].includes(args.resolution) ? args.resolution : '1k',
-              aspect_ratio: args.aspect_ratio || 'auto',
-            },
-          });
-          if (!sub.ok) return asText(`Erro Higgsfield (HTTP ${sub.status}): ${JSON.stringify(sub.data)}`);
-          const requestId = sub.data && sub.data.request_id;
-          if (!requestId) return asJson(sub.data);
-          const done = await waitTerminal(requestId, 12, 5000);
-          if (!done) {
-            return asJson({
-              request_id: requestId,
-              status: 'pendente',
-              hint: `consulte image_status(request_id="${requestId}")`,
-            });
-          }
-          return asJson({
-            request_id: requestId,
-            status: done.status,
-            images: (done.images || []).map((i) => i.url).filter(Boolean),
-            video: done.video && done.video.url,
-            error: done.error || done.message,
-          });
-        }
-        return asText(`Tool desconhecida: ${request.params.name}`);
-      } catch (e) {
-        return asText(`Erro Higgsfield: ${e.message}`);
-      }
-    });
-  }
-
-  async run() {
-    const transport = new StdioServerTransport();
-    await this.server.connect(transport);
-    console.error('Higgsfield MCP server running on stdio');
-  }
-}
-
 // 21st.dev MCP Server
 class TwentyFirstMCP {
   constructor() {
@@ -764,9 +616,6 @@ switch (serverName) {
   case 'strix':
     new StrixMCP().run();
     break;
-  case 'higgsfield':
-    new HiggsfieldMCP().run();
-    break;
   case '21st':
     new TwentyFirstMCP().run();
     break;
@@ -971,6 +820,6 @@ switch (serverName) {
     break;
   default:
     console.error('Usage: node mcp-servers.js <server-name>');
-    console.error('Available servers: tavily, firecrawl, strix, higgsfield, 21st, context7, aisa, graphify');
+    console.error('Available servers: tavily, firecrawl, strix, 21st, context7, aisa, graphify');
     process.exit(1);
 }
