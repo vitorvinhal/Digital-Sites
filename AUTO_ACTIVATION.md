@@ -1,5 +1,10 @@
 # Auto-Activation Rules - OpenCode
 
+> **DESMANTELADO em 24/10/26 — este arquivo é apenas documentação histórica.**
+> O mecanismo real de ativação é a skill de projeto `.opencode/skills/auto-activation/SKILL.md`
+> (o OpenCode não carrega este `.md`; nada aqui é executado). Os arquivos irmãos em
+> `agents/*.md` têm o mesmo status. Veja `agents.md` §5.
+
 **TODAS as skills instaladas são ativadas AUTOMATICAMENTE sem necessidade de pedido explícito.**
 
 ## Sistema de Detecção Automática

@@ -20,3 +20,15 @@ Os agentes atuam como **Engenheiros Sêniores com opinião própria**:
 - Prepared statements para BD.
 - Credenciais e keys 100% server-side.
 - Imagens em .webp (< 50KB), vídeos em .webm, acessibilidade WCAG total, compliance LGPD.
+
+## 5. Ativação Automática (skills e MCPs)
+Duas skills de projeto estão **sempre ativas** e devem ser carregadas no início de cada tarefa relevante:
+- `auto-activation` — detecta o domínio da tarefa e aplica as skills já instaladas que casam com ela (sem perguntar), fechando com `✓ Skills: <ids>`.
+- `mcp-auto-request` — escolhe o MCP certo pelo gatilho e evita repetir chamadas que falharam por autenticação.
+
+Regras inegociáveis dessas skills:
+- **Instalar skill nova de fonte externa exige confirmação** (instalar skill = executar instrução de terceiros).
+- **Chave ausente/placeholder não se repete**: reportar e parar.
+- **Segredos** ficam em `~/.config/opencode/secrets/*.key`, lidos pelo `opencode.json` via `{file:...}` — nunca no repo, log ou commit.
+
+Documentação histórica (não é mais o mecanismo): `AUTO_ACTIVATION.md`, `CLAUDE.md`, `FINAL_SYSTEM.md`, `SKILLS_*.md`, `agents/*.md`. Os scripts aposentados estão em `legacy/`.

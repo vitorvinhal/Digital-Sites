@@ -223,74 +223,172 @@ class StrixMCP {
       tools: [
         {
           name: 'pentest',
-          description: 'Executa pentest autônomo via Strix AI',
+          description:
+            'Inicia um pentest autônomo (Strix) contra um domínio. O domínio é cadastrado/verificado automaticamente se ainda não existir. Retorna scan_id para acompanhar.',
           inputSchema: {
             type: 'object',
             properties: {
-              target: { type: 'string' },
-              scope: { type: 'string' },
+              target: { type: 'string', description: 'URL ou domínio, ex.: https://exemplo.com' },
+              focus: { type: 'string', description: 'Áreas a testar primeiro, ex.: "checkout flow"' },
+              concerns: { type: 'string', description: 'Preocupações de segurança, ex.: "IDOR na API de invoices"' },
+              title: { type: 'string', description: 'Título do scan (máx 120)' },
+              tier: { type: 'string', enum: ['lite', 'standard', 'ultra'], description: 'Profundidade/custo (padrão lite = 0.3x)' },
             },
             required: ['target'],
           },
+        },
+        {
+          name: 'scan_status',
+          description: 'Status, resumo executivo e vulnerabilidades de um scan Strix pelo scan_id',
+          inputSchema: {
+            type: 'object',
+            properties: { scan_id: { type: 'string' } },
+            required: ['scan_id'],
+          },
+        },
+        {
+          name: 'list_scans',
+          description: 'Lista os últimos 20 scans da organização (sem efeito colateral)',
+          inputSchema: { type: 'object', properties: {} },
         },
       ],
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      if (request.params.name === 'pentest') {
-        const apiKey = process.env.STRIX_API_KEY;
-        if (!apiKey) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Erro: STRIX_API_KEY não encontrada',
-              },
-            ],
-          };
-        }
-        const target = request.params.arguments?.target || '';
-        const scope = request.params.arguments?.scope || 'default';
-        try {
-          const response = await fetch('https://api.strix.ai/v1/pentest', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              target: target,
-              scope: scope,
-            }),
-          });
-          const data = await response.json();
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(data, null, 2),
-              },
-            ],
-          };
-        } catch (e) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Erro Strix: ${e.message}`,
-              },
-            ],
-          };
-        }
+      const args = request.params.arguments || {};
+      const token = process.env.STRIX_API_KEY;
+      const asText = (t) => ({ content: [{ type: 'text', text: t }] });
+      const asJson = (o) => asText(JSON.stringify(o, null, 2));
+      if (!token || token.startsWith('YOUR_')) {
+        return asText('Erro: STRIX_API_KEY ausente/placeholder (esperado em ~/.config/opencode/secrets/strix.key)');
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Tool desconhecida: ${request.params.name}`,
+      // Base real: https://app.strix.ai/api/v1 (docs.app.strix.ai) — Bearer token
+      const api = async (path, opts = {}) => {
+        const res = await fetch(`https://app.strix.ai/api/v1${path}`, {
+          method: opts.method || 'GET',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/json',
+            ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
           },
-        ],
+          body: opts.body ? JSON.stringify(opts.body) : undefined,
+        });
+        const raw = await res.text();
+        let data;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          data = { raw: raw.slice(0, 400) };
+        }
+        return { status: res.status, ok: res.ok, data };
       };
+      try {
+        if (request.params.name === 'list_scans') {
+          const r = await api('/scans?limit=20');
+          if (!r.ok) return asJson(r.data);
+          return asJson({
+            scans: (r.data.items || []).map((s) => ({
+              id: s.id,
+              title: s.title,
+              status: s.status,
+              findings: s.findings,
+              created_at: s.created_at,
+              scans_this_month: r.data.scansThisMonth,
+            })),
+          });
+        }
+        if (request.params.name === 'scan_status') {
+          if (!args.scan_id) return asText('Erro: informe scan_id');
+          const r = await api(`/scans/${encodeURIComponent(args.scan_id)}`);
+          if (!r.ok) return asJson(r.data);
+          const d = r.data;
+          return asJson({
+            scan_id: d.id,
+            title: d.title,
+            status: d.status,
+            scan_tier: d.scan_tier,
+            created_at: d.created_at,
+            completed_at: d.completed_at,
+            duration: d.duration,
+            findings: d.findings,
+            executive_summary: d.executive_summary,
+            recommendations: d.recommendations,
+            vulnerabilities: (d.vulnerabilities || []).map((v) => ({
+              id: v.id,
+              severity: v.severity,
+              status: v.status,
+              title: v.title,
+              endpoint: v.endpoint,
+              method: v.method,
+              cvss: v.cvss,
+            })),
+          });
+        }
+        if (request.params.name === 'pentest') {
+          const raw = (args.target || '').trim();
+          if (!raw) return asText('Erro: informe target (ex.: https://exemplo.com)');
+          let host;
+          try {
+            host = new URL(raw.includes('://') ? raw : `https://${raw}`).hostname;
+          } catch (e) {
+            host = raw;
+          }
+          const tier = ['lite', 'standard', 'ultra'].includes(args.tier) ? args.tier : 'lite';
+
+          // 1) domínio já cadastrado?
+          const list = await api(`/domains?limit=100&search=${encodeURIComponent(host)}`);
+          if (!list.ok) return asText(`Erro ao listar domínios (HTTP ${list.status}): ${JSON.stringify(list.data)}`);
+          let domain = (list.data.items || []).find((d) => String(d.domain || '').toLowerCase() === host.toLowerCase());
+
+          // 2) cadastra se não existir (CreateDomainRequest: domain + asset_type)
+          if (!domain) {
+            const created = await api('/domains', {
+              method: 'POST',
+              body: { domain: host, asset_type: 'domain' },
+            });
+            if (!created.ok) return asText(`Erro ao cadastrar ${host} (HTTP ${created.status}): ${JSON.stringify(created.data)}`);
+            domain = created.data;
+          }
+
+          // 3) prova de posse — só o dono passa aqui
+          if (!domain.verified) {
+            const v = await api(`/domains/${domain.id}/verify`, { method: 'POST', body: {} });
+            if (v.data && v.data.id) domain = v.data;
+          }
+          if (!domain.verified) {
+            return asText(
+              `Domínio ${host} cadastrado (id ${domain.id}) mas NÃO VERIFICADO — o Strix exige provar posse antes de escanear.\n` +
+                `Opções:\n` +
+                `1) Publique o registro indicado no dashboard Strix (DNS TXT / arquivo /.well-known / meta tag) e repita o chamado;\n` +
+                `2) Use um domínio já verificado na organização (veja list_scans ou o dashboard).`
+            );
+          }
+
+          // 4) dispara o scan (CreateScanRequest exige alvo por id)
+          const created = await api('/scans', {
+            method: 'POST',
+            body: {
+              domain_ids: [domain.id],
+              scan_tier: tier,
+              title: String(args.title || `Pentest de ${host}`).slice(0, 120),
+              ...(args.focus ? { focus: String(args.focus) } : {}),
+              ...(args.concerns ? { concerns: String(args.concerns) } : {}),
+            },
+          });
+          if (!created.ok) return asText(`Erro ao criar scan (HTTP ${created.status}): ${JSON.stringify(created.data)}`);
+          return asJson({
+            scan_id: created.data.scan_id,
+            title: created.data.title,
+            status: created.data.status,
+            tier,
+            target: host,
+            next: `Acompanhe com scan_status(scan_id="${created.data.scan_id}")`,
+          });
+        }
+        return asText(`Tool desconhecida: ${request.params.name}`);
+      } catch (e) {
+        return asText(`Erro Strix: ${e.message}`);
+      }
     });
   }
 
@@ -325,74 +423,120 @@ class HiggsfieldMCP {
       tools: [
         {
           name: 'generate_image',
-          description: 'Gera imagem via Higgsfield AI',
+          description:
+            'Gera imagem via Higgsfield AI (modelo xai/grok-imagine-image-2.0). Envia e espera o resultado; se não terminar, devolve request_id para consultar com image_status.',
           inputSchema: {
             type: 'object',
             properties: {
               prompt: { type: 'string' },
-              style: { type: 'string' },
+              aspect_ratio: {
+                type: 'string',
+                enum: ['auto', '1:1', '1:2', '2:1', '3:2', '2:3', '4:3', '3:4', '16:9', '9:16'],
+                description: 'Padrão auto',
+              },
+              resolution: { type: 'string', enum: ['1k', '2k'], description: 'Padrão 1k' },
+              quality: { type: 'string', enum: ['low', 'medium'], description: 'Padrão medium' },
             },
             required: ['prompt'],
+          },
+        },
+        {
+          name: 'image_status',
+          description: 'Consulta o status de uma geração Higgsfield pelo request_id (sem novo custo)',
+          inputSchema: {
+            type: 'object',
+            properties: { request_id: { type: 'string' } },
+            required: ['request_id'],
           },
         },
       ],
     }));
 
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      if (request.params.name === 'generate_image') {
-        const apiKey = process.env.HIGGSFIELD_API_KEY;
-        if (!apiKey) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: 'Erro: HIGGSFIELD_API_KEY não encontrada',
-              },
-            ],
-          };
-        }
-        const prompt = request.params.arguments?.prompt || '';
-        const style = request.params.arguments?.style || 'default';
-        try {
-          const response = await fetch('https://api.higgsfield.ai/v1/generate', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`,
-            },
-            body: JSON.stringify({
-              prompt: prompt,
-              style: style,
-            }),
-          });
-          const data = await response.json();
-          return {
-            content: [
-              {
-                type: 'text',
-                text: JSON.stringify(data, null, 2),
-              },
-            ],
-          };
-        } catch (e) {
-          return {
-            content: [
-              {
-                type: 'text',
-                text: `Erro Higgsfield: ${e.message}`,
-              },
-            ],
-          };
-        }
+      const args = request.params.arguments || {};
+      const apiKey = process.env.HIGGSFIELD_API_KEY;
+      const asText = (t) => ({ content: [{ type: 'text', text: t }] });
+      const asJson = (o) => asText(JSON.stringify(o, null, 2));
+      if (!apiKey || apiKey.startsWith('YOUR_')) {
+        return asText('Erro: HIGGSFIELD_API_KEY ausente/placeholder (esperado em ~/.config/opencode/secrets/higgsfield.key)');
       }
-      return {
-        content: [
-          {
-            type: 'text',
-            text: `Tool desconhecida: ${request.params.name}`,
+      // Base real: https://api.higgsfield.ai — auth scheme NÃO é Bearer, é "Key"
+      const api = async (path, opts = {}) => {
+        const res = await fetch(`https://api.higgsfield.ai${path}`, {
+          method: opts.method || 'GET',
+          headers: {
+            Authorization: `Key ${apiKey}`,
+            Accept: 'application/json',
+            ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
           },
-        ],
+          body: opts.body ? JSON.stringify(opts.body) : undefined,
+        });
+        const raw = await res.text();
+        let data;
+        try {
+          data = raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          data = { raw: raw.slice(0, 400) };
+        }
+        return { status: res.status, ok: res.ok, data };
       };
+      const waitTerminal = async (requestId, tries = 12, delayMs = 5000) => {
+        for (let i = 0; i < tries; i++) {
+          const r = await api(`/requests/${encodeURIComponent(requestId)}/status`);
+          const st = r.data && r.data.status;
+          if (['completed', 'failed', 'nsfw', 'canceled'].includes(st)) return r.data;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+        }
+        return null;
+      };
+      try {
+        if (request.params.name === 'image_status') {
+          if (!args.request_id) return asText('Erro: informe request_id');
+          const r = await api(`/requests/${encodeURIComponent(args.request_id)}/status`);
+          if (!r.ok) return asJson(r.data);
+          const d = r.data;
+          return asJson({
+            request_id: args.request_id,
+            status: d.status,
+            images: (d.images || []).map((i) => i.url).filter(Boolean),
+            video: d.video && d.video.url,
+            error: d.error || d.message,
+          });
+        }
+        if (request.params.name === 'generate_image') {
+          if (!args.prompt) return asText('Erro: informe prompt');
+          const sub = await api('/xai/grok-imagine-image-2.0', {
+            method: 'POST',
+            body: {
+              prompt: String(args.prompt),
+              quality: ['low', 'medium'].includes(args.quality) ? args.quality : 'medium',
+              resolution: ['1k', '2k'].includes(args.resolution) ? args.resolution : '1k',
+              aspect_ratio: args.aspect_ratio || 'auto',
+            },
+          });
+          if (!sub.ok) return asText(`Erro Higgsfield (HTTP ${sub.status}): ${JSON.stringify(sub.data)}`);
+          const requestId = sub.data && sub.data.request_id;
+          if (!requestId) return asJson(sub.data);
+          const done = await waitTerminal(requestId, 12, 5000);
+          if (!done) {
+            return asJson({
+              request_id: requestId,
+              status: 'pendente',
+              hint: `consulte image_status(request_id="${requestId}")`,
+            });
+          }
+          return asJson({
+            request_id: requestId,
+            status: done.status,
+            images: (done.images || []).map((i) => i.url).filter(Boolean),
+            video: done.video && done.video.url,
+            error: done.error || done.message,
+          });
+        }
+        return asText(`Tool desconhecida: ${request.params.name}`);
+      } catch (e) {
+        return asText(`Erro Higgsfield: ${e.message}`);
+      }
     });
   }
 
