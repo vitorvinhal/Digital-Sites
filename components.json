@@ -15,7 +15,6 @@
     "utils": "@/lib/utils"
   },
   "registries": {
-    "@tailwind": "https://registry.tailwindcss.com/{name}",
-    "@shadcn": "https://registry.shadcn.com/{name}"
+    "@shadcn": "https://ui.shadcn.com/r/styles/{style}/{name}.json"
   }
 }
