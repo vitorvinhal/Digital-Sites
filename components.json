@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.sh/schema.json",
+  "style": "default",
+  "rsc": false,
+  "tsx": false,
+  "tailwind": {
+    "config": "tailwind.config.js",
+    "css": "app/globals.css",
+    "baseColor": "slate",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/components",
+    "utils": "@/lib/utils"
+  },
+  "registries": {
+    "@tailwind": "https://registry.tailwindcss.com/{name}",
+    "@shadcn": "https://registry.shadcn.com/{name}"
+  }
+}
