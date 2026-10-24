@@ -263,8 +263,9 @@ class StrixMCP {
         return asText('Erro: STRIX_API_KEY ausente/placeholder (esperado em ~/.config/opencode/secrets/strix.key)');
       }
       // Base real: https://app.strix.ai/api/v1 (docs.app.strix.ai) — Bearer token
+      const base = String(process.env.STRIX_BASE_URL || 'https://app.strix.ai/api/v1').replace(/\/+$/, '');
       const api = async (path, opts = {}) => {
-        const res = await fetch(`https://app.strix.ai/api/v1${path}`, {
+        const res = await fetch(`${base}${path}`, {
           method: opts.method || 'GET',
           headers: {
             Authorization: `Bearer ${token}`,
