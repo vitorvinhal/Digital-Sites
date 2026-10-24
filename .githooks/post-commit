@@ -1,0 +1,7 @@
+#!/bin/sh
+# post-commit - envia o commit ao GitHub automaticamente.
+# Habilitado via: git config core.hooksPath .githooks
+# "|| true" garante que um push falho nunca derrube o commit local.
+
+GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never git push origin HEAD >/dev/null 2>&1 || true
+exit 0
