@@ -671,9 +671,9 @@ switch (serverName) {
               };
             }
             const prompt = request.params.arguments?.message || '';
-            const model = request.params.arguments?.model || 'aisa-llm';
+            const model = request.params.arguments?.model || 'qwen3.7-flash';
             try {
-              const response = await fetch('https://console.aisa.one/v1/chat/completions', {
+              const response = await fetch('https://api.aisa.one/v1/chat/completions', {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
@@ -684,7 +684,31 @@ switch (serverName) {
                   messages: [{ role: 'user', content: prompt }],
                 }),
               });
-              const data = await response.json();
+              const raw = await response.text();
+              let data;
+              try {
+                data = JSON.parse(raw);
+              } catch {
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `AISA devolveu HTTP ${response.status} com resposta não-JSON (proxy/portal?). Trecho: ${raw.slice(0, 200)}`,
+                    },
+                  ],
+                };
+              }
+              if (!response.ok || data.error) {
+                const msg = typeof data.error === 'string' ? data.error : (data.error?.message || JSON.stringify(data.error));
+                return {
+                  content: [
+                    {
+                      type: 'text',
+                      text: `AISA HTTP ${response.status}: ${msg}`,
+                    },
+                  ],
+                };
+              }
               return {
                 content: [
                   {
